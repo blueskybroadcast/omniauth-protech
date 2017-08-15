@@ -7,6 +7,7 @@ require 'multi_xml'
 module OmniAuth
   module Strategies
     class Protech < OmniAuth::Strategies::OAuth2
+      option :app_options, { app_event_id: nil }
       option :name, 'protech'
       option :client_options, {
         authentication_url: 'MUST BE SET',
@@ -40,13 +41,19 @@ module OmniAuth
       end
 
       def callback_phase
+        slug = request.params['slug']
+        account = Account.find_by(slug: slug)
+        @app_event = account.app_events.where(id: options.app_options.app_event_id).first_or_create(activity_type: 'sso')
+
         self.access_token = {
           token: request.params['Token'],
           expires: Time.now.utc + 60.minutes
         }
         @token = request.params['Token']
         self.env['omniauth.auth'] = auth_hash
-        self.env['omniauth.origin'] = '/' + request.params['slug']
+        self.env['omniauth.origin'] = '/' + slug
+        self.env['omniauth.app_event_id'] = @app_event.id
+        finalize_app_event
         call_app!
       end
 
@@ -60,9 +67,13 @@ module OmniAuth
       private
 
       def get_user_info
+        request_log = "Protech Authentication Request:\nPOST #{user_info_url}"
+        @app_event.logs.create(level: 'info', text: request_log)
         RestClient.proxy = proxy_url if proxy_url
         response = RestClient.post user_info_url, user_info_payload, request_headers
+        response_log = "Protech Authentication Response (code: #{response&.code}):\n#{response.inspect}"
         if response.code == 200
+          @app_event.logs.create(level: 'info', text: response_log)
           body = response.body
           body.gsub!('&gt;', '>')
           body.gsub!('&lt;', '<')
@@ -74,6 +85,8 @@ module OmniAuth
           doc[:uid] = doc[:number]
           doc
         else
+          @app_event.logs.create(level: 'error', text: response_log)
+          @app_event.fail!
           {}
         end
       end
@@ -134,6 +147,20 @@ module OmniAuth
         '//Envelope/Body/AuthenticateTokenResponse/AuthenticateTokenResult'
       end
 
+      def finalize_app_event
+        app_event_data = {
+          user_info: {
+            uid: info[:uid],
+            first_name: info[:first_name],
+            last_name: info[:last_name],
+            email: info[:email],
+            member_type: info[:member_type],
+            is_member: info[:member]
+          }
+        }
+
+        @app_event.update(raw_data: app_event_data)
+      end
     end
   end
 end
