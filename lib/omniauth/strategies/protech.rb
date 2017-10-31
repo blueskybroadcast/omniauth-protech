@@ -45,16 +45,23 @@ module OmniAuth
         account = Account.find_by(slug: slug)
         @app_event = account.app_events.where(id: options.app_options.app_event_id).first_or_create(activity_type: 'sso')
 
-        self.access_token = {
-          token: request.params['Token'],
-          expires: Time.now.utc + 60.minutes
-        }
         @token = request.params['Token']
-        self.env['omniauth.auth'] = auth_hash
-        self.env['omniauth.origin'] = '/' + slug
-        self.env['omniauth.app_event_id'] = @app_event.id
-        finalize_app_event
-        call_app!
+
+        if @token.present?
+          self.access_token = {
+            token: @token,
+            expires: Time.now.utc + 60.minutes
+          }
+          self.env['omniauth.auth'] = auth_hash
+          self.env['omniauth.origin'] = '/' + slug
+          self.env['omniauth.app_event_id'] = @app_event.id
+          finalize_app_event
+          call_app!
+        else
+          @app_event.logs.create(level: 'error', text: 'Token is absent in the request params')
+          @app_event.fail!
+          fail!(:invalid_credentials)
+        end
       end
 
       def auth_hash
