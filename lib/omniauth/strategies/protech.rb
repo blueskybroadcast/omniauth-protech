@@ -76,8 +76,7 @@ module OmniAuth
       def get_user_info
         request_log = "Protech Authentication Request:\nPOST #{user_info_url}"
         @app_event.logs.create(level: 'info', text: request_log)
-        RestClient.proxy = proxy_url if proxy_url
-        response = RestClient.post user_info_url, user_info_payload, request_headers
+        response = RestClient::Request.execute(request_options)
         response_log = "Protech Authentication Response (code: #{response&.code}):\n#{response.inspect}"
         if response.code == 200
           @app_event.logs.create(level: 'info', text: response_log)
@@ -132,6 +131,17 @@ module OmniAuth
         {
           'Content-Type' => 'text/xml; charset=utf-8'
         }
+      end
+
+      def request_options
+        options = {
+          method: :post,
+          url: user_info_url,
+          payload: user_info_payload,
+          headers: request_headers
+        }
+        options[:proxy] = proxy_url if proxy_url
+        options
       end
 
       def security_password
