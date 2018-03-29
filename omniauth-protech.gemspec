@@ -21,7 +21,7 @@ Gem::Specification.new do |spec|
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.add_dependency 'omniauth', '~> 1.0'
   spec.add_dependency 'omniauth-oauth2', '~> 1.0'
-  spec.add_dependency 'rest-client'
+  spec.add_dependency 'rest-client', '~> 2.0'
   spec.add_dependency 'builder'
   spec.add_dependency 'nokogiri'
   spec.add_dependency 'multi_xml'
